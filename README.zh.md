@@ -14,6 +14,7 @@
 python kugou_cli.py search "pleaseeedontcry"
 python kugou_cli.py download "SCENE SCENE SCENE pleaseeedontcry" --index 1
 python kugou_cli.py search "https://www.kugou.com/mixsong/..."
+python kugou_cli.py download "https://www.kugou.com/mixsong/..."
 python kugou_cli.py download "https://www.kugou.com/album/info/..."
 python kugou_cli.py download "https://www.kugou.com/album/info/..." --index 1 2 3
 ```
@@ -33,13 +34,14 @@ python kugou_cli.py search "歌手或歌曲" --limit 30
 
 ```bash
 python kugou_cli.py download "歌手或歌曲" --index 1 2 --output downloads --limit 30
+python kugou_cli.py download "https://www.kugou.com/mixsong/..." --output downloads
 python kugou_cli.py download "https://www.kugou.com/album/info/..." --output downloads
 ```
 
 | 参数        | 说明                                                         |
 |-------------|--------------------------------------------------------------|
 | `keyword`   | 歌手名、歌曲名、搜索关键词，或支持的酷狗链接                |
-| `--index`   | 搜索结果中的一个或多个编号；对专辑链接可省略，省略时默认下载整张专辑 |
+| `--index`   | 搜索结果中的一个或多个编号；对直链歌曲和专辑链接可省略，省略时默认下载解析出的全部曲目 |
 | `--output`  | 文件保存目录（默认：`downloads/`）                           |
 | `--limit`   | 筛选前检索的原始结果数量                                     |
 

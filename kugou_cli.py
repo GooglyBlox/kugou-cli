@@ -322,13 +322,15 @@ def command_download(args: argparse.Namespace) -> int:
 
     print_results(results)
 
-    is_album_input = is_probable_url(args.keyword) and bool(ALBUM_PATH_RE.search(urlparse(args.keyword).path.lower()))
+    parsed_path = urlparse(args.keyword).path.lower() if is_probable_url(args.keyword) else ""
+    is_album_input = bool(ALBUM_PATH_RE.search(parsed_path))
+    is_mixsong_input = bool(MIXSONG_PATH_RE.search(parsed_path))
     if args.index:
         selected_indexes = validate_indexes(args.index, len(results))
-    elif is_album_input:
+    elif is_album_input or is_mixsong_input:
         selected_indexes = list(range(1, len(results) + 1))
     else:
-        raise ValueError("--index is required unless the input is an album URL.")
+        raise ValueError("--index is required unless the input is a supported direct Kugou URL.")
 
     for index in selected_indexes:
         track = results[index - 1]
@@ -365,7 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--index",
         type=int,
         nargs="+",
-        help="One or more result numbers from the search list. Optional for album URLs; defaults to all tracks.",
+        help="One or more result numbers from the search list. Optional for direct Kugou song or album URLs; defaults to all resolved tracks.",
     )
     download_parser.add_argument(
         "--output",
