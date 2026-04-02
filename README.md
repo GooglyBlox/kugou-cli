@@ -45,7 +45,7 @@ python kugou_cli.py download "artist or song" --index 1 2 --output downloads --l
 
 ## Credit
 
-Derived in part from [CreateDownloader/KugouDownloaderNew](https://github.com/CreateDownloader/KugouDownloaderNew).
+Derived in part from [CreateDownloader/KugouDownloaderNew](https://github.com/CreateDownloader/KugouDownloaderNew), licensed under [EPL-2.0](https://www.eclipse.org/legal/epl-2.0/). This project is likewise distributed under EPL-2.0.
 
 ## Disclaimer
 
