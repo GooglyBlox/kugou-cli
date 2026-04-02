@@ -8,9 +8,13 @@ A Python CLI for searching and downloading tracks from Kugou.
 
 ## Usage
 
+The `keyword` argument accepts a search phrase or a supported Kugou URL (`mixsong`, `album/info`).
+
 ```bash
 python kugou_cli.py search "pleaseeedontcry"
 python kugou_cli.py download "SCENE SCENE SCENE pleaseeedontcry" --index 1
+python kugou_cli.py search "https://www.kugou.com/mixsong/..."
+python kugou_cli.py download "https://www.kugou.com/album/info/..." --index 1 2 3
 ```
 
 ### `search`
@@ -19,10 +23,10 @@ python kugou_cli.py download "SCENE SCENE SCENE pleaseeedontcry" --index 1
 python kugou_cli.py search "artist or song" --limit 30
 ```
 
-| Argument    | Description                                              |
-|-------------|----------------------------------------------------------|
-| `keyword`   | Artist, song title, or search phrase                     |
-| `--limit`   | Number of raw results to inspect before filtering        |
+| Argument    | Description                                                  |
+|-------------|--------------------------------------------------------------|
+| `keyword`   | Artist, song title, search phrase, or supported Kugou URL    |
+| `--limit`   | Number of raw results to inspect before filtering            |
 
 ### `download`
 
@@ -30,12 +34,12 @@ python kugou_cli.py search "artist or song" --limit 30
 python kugou_cli.py download "artist or song" --index 1 2 --output downloads --limit 30
 ```
 
-| Argument    | Description                                              |
-|-------------|----------------------------------------------------------|
-| `keyword`   | Artist, song title, or search phrase                     |
-| `--index`   | One or more result numbers from the search list          |
-| `--output`  | Folder to save files into (default: `downloads/`)        |
-| `--limit`   | Number of raw results to inspect                         |
+| Argument    | Description                                                  |
+|-------------|--------------------------------------------------------------|
+| `keyword`   | Artist, song title, search phrase, or supported Kugou URL    |
+| `--index`   | One or more result numbers from the search list              |
+| `--output`  | Folder to save files into (default: `downloads/`)            |
+| `--limit`   | Number of raw results to inspect                             |
 
 ## Notes
 
@@ -45,7 +49,7 @@ python kugou_cli.py download "artist or song" --index 1 2 --output downloads --l
 
 ## Credit
 
-Derived in part from [CreateDownloader/KugouDownloaderNew](https://github.com/CreateDownloader/KugouDownloaderNew), licensed under [EPL-2.0](https://www.eclipse.org/legal/epl-2.0/). This project is likewise distributed under EPL-2.0.
+Derived in part from [CreateDownloader/KugouDownloaderNew](https://github.com/CreateDownloader/KugouDownloaderNew) (EPL-2.0) and [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi) (MIT). This project is distributed under [EPL-2.0](https://www.eclipse.org/legal/epl-2.0/).
 
 ## Disclaimer
 

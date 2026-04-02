@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 DEFAULT_LIMIT = 30
@@ -22,12 +22,20 @@ SEARCH_URL = (
     "http://mobilecdn.kugou.com/api/v3/search/song"
     "?format=json&keyword={keyword}&page=1&pagesize={page_size}"
 )
+ALBUM_INFO_URL = "http://mobilecdn.kugou.com/api/v3/album/info?albumid={album_id}&format=json"
+ALBUM_SONGS_URL = (
+    "http://mobilecdn.kugou.com/api/v3/album/song"
+    "?albumid={album_id}&page=1&pagesize={page_size}&format=json"
+)
 TRACK_URL = (
     "http://trackercdn.kugou.com/i/"
     "?cmd=4&hash={hash_value}&key={key}&pid=1&forceDown=0&vip=1"
 )
 USER_AGENT = "Mozilla/5.0 (compatible; kugou-cli/1.0)"
 INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
+MIXSONG_DATA_RE = re.compile(r"var\s+dataFromSmarty\s*=\s*(\[.*?\])\s*,\s*//", re.DOTALL)
+MIXSONG_PATH_RE = re.compile(r"/mixsong/([a-z0-9]+)", re.IGNORECASE)
+ALBUM_PATH_RE = re.compile(r"/album/info/([a-z0-9]+)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -40,6 +48,8 @@ class Track:
     bitrate: str
     file_size: int
     duration_seconds: int
+    album_id: str = ""
+    source_label: str = ""
 
     @property
     def display_size_mb(self) -> float:
@@ -52,7 +62,15 @@ class Track:
 
     @property
     def display_bitrate(self) -> str:
-        return self.bitrate or "unknown"
+        if not self.bitrate:
+            return "unknown"
+        try:
+            bitrate_value = int(self.bitrate)
+        except ValueError:
+            return self.bitrate
+        if bitrate_value >= 1000:
+            return str(bitrate_value // 1000)
+        return str(bitrate_value)
 
 
 def safe_print(message: str, *, stream: Any = sys.stdout) -> None:
@@ -60,11 +78,15 @@ def safe_print(message: str, *, stream: Any = sys.stdout) -> None:
     print(message.encode(encoding, errors="replace").decode(encoding), file=stream)
 
 
-def http_get_json(url: str) -> dict[str, Any]:
+def http_get_text(url: str) -> str:
     request = Request(url, headers={"User-Agent": USER_AGENT})
     with urlopen(request) as response:
         charset = response.headers.get_content_charset() or "utf-8"
-        return json.loads(response.read().decode(charset))
+        return response.read().decode(charset, "replace")
+
+
+def http_get_json(url: str) -> dict[str, Any]:
+    return json.loads(http_get_text(url))
 
 
 def md5_hex(value: str) -> str:
@@ -76,15 +98,52 @@ def sanitize_filename(value: str) -> str:
     return cleaned or "track"
 
 
-def parse_track(item: dict[str, Any]) -> Track | None:
-    sqhash = str(item.get("sqhash") or "")
-    if not sqhash:
+def is_probable_url(value: str) -> bool:
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def decode_base36_candidates(value: str) -> list[int]:
+    normalized = value.lower()
+    candidates: list[int] = []
+    seen: set[int] = set()
+    for cut in range(2, min(5, len(normalized))):
+        core = normalized[:-cut]
+        if not core:
+            continue
+        try:
+            decoded = int(core, 36)
+        except ValueError:
+            continue
+        if decoded not in seen:
+            seen.add(decoded)
+            candidates.append(decoded)
+    try:
+        decoded_full = int(normalized, 36)
+    except ValueError:
+        decoded_full = None
+    if decoded_full is not None and decoded_full not in seen:
+        candidates.append(decoded_full)
+    return candidates
+
+
+def extract_best_hash(item: dict[str, Any]) -> str:
+    for key_name in ("sqhash", "320hash", "hash"):
+        value = str(item.get(key_name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def build_track_from_metadata(item: dict[str, Any], *, filename_fallback: str = "Unknown Track") -> Track | None:
+    hash_value = extract_best_hash(item)
+    if not hash_value:
         return None
 
-    key = md5_hex(f"{sqhash}kgcloud")
+    key = md5_hex(f"{hash_value}kgcloud")
 
     try:
-        detail = http_get_json(TRACK_URL.format(hash_value=sqhash, key=key))
+        detail = http_get_json(TRACK_URL.format(hash_value=hash_value, key=key))
     except (HTTPError, URLError, json.JSONDecodeError):
         return None
 
@@ -95,15 +154,22 @@ def parse_track(item: dict[str, Any]) -> Track | None:
     if not download_url:
         return None
 
+    filename = (
+        str(item.get("filename") or "")
+        or str(item.get("audio_name") or "")
+        or filename_fallback
+    )
+
     return Track(
-        filename=str(item.get("filename") or "Unknown Track"),
-        hash_value=sqhash,
+        filename=filename,
+        hash_value=hash_value,
         key=key,
         download_url=download_url,
-        extension=str(detail.get("extName") or "flac").lower(),
-        bitrate=str(detail.get("bitRate") or ""),
-        file_size=int(detail.get("fileSize") or 0),
-        duration_seconds=int(detail.get("timeLength") or 0),
+        extension=str(detail.get("extName") or item.get("extname") or "flac").lower(),
+        bitrate=str(detail.get("bitRate") or item.get("bitrate") or ""),
+        file_size=int(detail.get("fileSize") or item.get("filesize") or 0),
+        duration_seconds=int(detail.get("timeLength") or item.get("duration") or item.get("timelength") or 0),
+        album_id=str(item.get("album_id") or ""),
     )
 
 
@@ -115,11 +181,79 @@ def search_tracks(keyword: str, page_size: int = DEFAULT_LIMIT) -> list[Track]:
     for item in payload.get("data", {}).get("info", []):
         if not isinstance(item, dict):
             continue
-        track = parse_track(item)
+        track = build_track_from_metadata(item)
         if track is not None:
             results.append(track)
 
     return results
+
+
+def resolve_mixsong_url(url: str) -> list[Track]:
+    html = http_get_text(url)
+    match = MIXSONG_DATA_RE.search(html)
+    if not match:
+        raise ValueError("Unable to extract song data from mixsong page.")
+
+    items = json.loads(match.group(1))
+    results: list[Track] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        track = build_track_from_metadata(item)
+        if track is not None:
+            results.append(track)
+
+    return results
+
+
+def resolve_album_url(url: str, page_size: int = 100) -> list[Track]:
+    match = ALBUM_PATH_RE.search(urlparse(url).path)
+    if not match:
+        raise ValueError("Album URL did not contain an encoded album id.")
+
+    encoded_album_id = match.group(1)
+    found_album_tracks = False
+
+    for decoded_album_id in decode_base36_candidates(encoded_album_id):
+        album_id = str(decoded_album_id)
+        album_info = http_get_json(ALBUM_INFO_URL.format(album_id=album_id))
+        album_info_data = album_info.get("data") if isinstance(album_info.get("data"), dict) else {}
+        album_name = str(album_info_data.get("albumname") or "Unknown Album")
+
+        songs_payload = http_get_json(ALBUM_SONGS_URL.format(album_id=album_id, page_size=page_size))
+        song_data = songs_payload.get("data") if isinstance(songs_payload.get("data"), dict) else {}
+        info = song_data.get("info", [])
+        if info:
+            found_album_tracks = True
+
+        results: list[Track] = []
+        for item in info:
+            if not isinstance(item, dict):
+                continue
+            track = build_track_from_metadata(item, filename_fallback=album_name)
+            if track is not None:
+                results.append(track)
+
+        if results:
+            return results
+
+    if found_album_tracks:
+        raise ValueError("Album found, but all tracks appear to require payment or are otherwise unavailable.")
+
+    return []
+
+
+def resolve_input(value: str, *, page_size: int = DEFAULT_LIMIT) -> list[Track]:
+    if not is_probable_url(value):
+        return search_tracks(value, page_size)
+
+    path = urlparse(value).path.lower()
+    if MIXSONG_PATH_RE.search(path):
+        return resolve_mixsong_url(value)
+    if ALBUM_PATH_RE.search(path):
+        return resolve_album_url(value, page_size=max(page_size, 100))
+
+    raise ValueError("Unsupported Kugou URL. Supported: mixsong and album/info URLs.")
 
 
 def print_results(results: Iterable[Track]) -> None:
@@ -175,13 +309,13 @@ def validate_indexes(indexes: Iterable[int], total: int) -> list[int]:
 
 
 def command_search(args: argparse.Namespace) -> int:
-    results = search_tracks(args.keyword, args.limit)
+    results = resolve_input(args.keyword, page_size=args.limit)
     print_results(results)
     return 0
 
 
 def command_download(args: argparse.Namespace) -> int:
-    results = search_tracks(args.keyword, args.limit)
+    results = resolve_input(args.keyword, page_size=args.limit)
     if not results:
         safe_print("No downloadable results found.")
         return 1
@@ -198,7 +332,7 @@ def command_download(args: argparse.Namespace) -> int:
 
 
 def add_common_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("keyword", help="Song or artist search term.")
+    parser.add_argument("keyword", help="Song name, artist, search phrase, or supported Kugou URL.")
     parser.add_argument(
         "--limit",
         type=int,
@@ -213,11 +347,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    search_parser = subparsers.add_parser("search", help="Search for downloadable tracks.")
+    search_parser = subparsers.add_parser("search", help="Search for downloadable tracks or inspect a supported Kugou URL.")
     add_common_arguments(search_parser)
     search_parser.set_defaults(func=command_search)
 
-    download_parser = subparsers.add_parser("download", help="Search and download selected tracks.")
+    download_parser = subparsers.add_parser("download", help="Search or resolve a supported Kugou URL, then download selected tracks.")
     add_common_arguments(download_parser)
     download_parser.add_argument(
         "--index",
@@ -249,7 +383,10 @@ def main() -> int:
         safe_print(f"Network error: {exc.reason}", stream=sys.stderr)
         return 1
     except json.JSONDecodeError:
-        safe_print(f"Failed to parse Kugou response.", stream=sys.stderr)
+        safe_print("Failed to parse Kugou response.", stream=sys.stderr)
+        return 1
+    except ValueError as exc:
+        safe_print(str(exc), stream=sys.stderr)
         return 1
     except KeyboardInterrupt:
         safe_print("Cancelled.", stream=sys.stderr)
