@@ -14,6 +14,7 @@ The `keyword` argument accepts a search phrase or a supported Kugou URL (`mixson
 python kugou_cli.py search "pleaseeedontcry"
 python kugou_cli.py download "SCENE SCENE SCENE pleaseeedontcry" --index 1
 python kugou_cli.py search "https://www.kugou.com/mixsong/..."
+python kugou_cli.py download "https://www.kugou.com/album/info/..."
 python kugou_cli.py download "https://www.kugou.com/album/info/..." --index 1 2 3
 ```
 
@@ -32,12 +33,13 @@ python kugou_cli.py search "artist or song" --limit 30
 
 ```bash
 python kugou_cli.py download "artist or song" --index 1 2 --output downloads --limit 30
+python kugou_cli.py download "https://www.kugou.com/album/info/..." --output downloads
 ```
 
 | Argument    | Description                                                  |
 |-------------|--------------------------------------------------------------|
 | `keyword`   | Artist, song title, search phrase, or supported Kugou URL    |
-| `--index`   | One or more result numbers from the search list              |
+| `--index`   | One or more result numbers from the search list; optional for album URLs and defaults to the full album |
 | `--output`  | Folder to save files into (default: `downloads/`)            |
 | `--limit`   | Number of raw results to inspect                             |
 
@@ -46,6 +48,7 @@ python kugou_cli.py download "artist or song" --index 1 2 --output downloads --l
 - Some results show `unknown kbps`, as the upstream API doesn't always return bitrate info.
 - Duplicate filenames get a ` (2)`, ` (3)`, etc. suffix instead of being overwritten.
 - Availability and metadata depend entirely on the upstream service.
+- Some albums may resolve successfully but still be unavailable for download if Kugou marks all tracks as paid-only.
 
 ## Credit
 

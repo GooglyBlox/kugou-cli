@@ -322,7 +322,15 @@ def command_download(args: argparse.Namespace) -> int:
 
     print_results(results)
 
-    for index in validate_indexes(args.index, len(results)):
+    is_album_input = is_probable_url(args.keyword) and bool(ALBUM_PATH_RE.search(urlparse(args.keyword).path.lower()))
+    if args.index:
+        selected_indexes = validate_indexes(args.index, len(results))
+    elif is_album_input:
+        selected_indexes = list(range(1, len(results) + 1))
+    else:
+        raise ValueError("--index is required unless the input is an album URL.")
+
+    for index in selected_indexes:
         track = results[index - 1]
         destination = resolve_output_path(Path(args.output), track)
         safe_print(f"Downloading [{index}] -> {destination}")
@@ -357,8 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--index",
         type=int,
         nargs="+",
-        required=True,
-        help="One or more result numbers from the search list.",
+        help="One or more result numbers from the search list. Optional for album URLs; defaults to all tracks.",
     )
     download_parser.add_argument(
         "--output",
